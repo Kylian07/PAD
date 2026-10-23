@@ -265,6 +265,25 @@ for idx, domain in enumerate(TRAIN_ORDER):
         torch.cuda.empty_cache()
 print(f"[DONE] total wall time {timedelta(seconds=int(time.time() - t_all))}; results -> {SEQ_CSV}")
 
+# Extra final evaluation when the prompt pool is not full (e.g. kaggle-4 fills 8+8+8+4 = 28 of 36 slots):
+# the official test script counts all 36 slots, so 8 never-trained random slots also take part in top-k selection.
+# Here the final model is ALSO evaluated with only the slots it actually trained, and both results are reported.
+SEQ_CSV_TRAINSLOTS = osp.join(OUT_DIR, "final_eval_trained_slots.csv")
+_done_domains = [d for d in TRAIN_ORDER if find_existing_ckpt(d)]
+if _done_domains and _done_domains[-1] == TRAIN_ORDER[-1] and not osp.exists(SEQ_CSV_TRAINSLOTS):
+    _fm = model_from_ckpt(ckpt_path(TRAIN_ORDER[-1]), TRAIN_ORDER[-1])
+    _va = getattr(_fm.image_encoder, "va_prompt", None)
+    if _va is not None and int(_va.active_sizes[0, 0]) < _va.pool_size:
+        print(f"[extra eval] pool used {int(_va.active_sizes[0, 0])}/{_va.pool_size} slots -> evaluating with trained slots only")
+        _flag = OFFICIAL_EVAL_SLOT_RECONSTRUCTION
+        OFFICIAL_EVAL_SLOT_RECONSTRUCTION = False
+        try:
+            setup_logger(osp.join(OUT_DIR, TRAIN_ORDER[-1]), "test_log.txt")
+            evaluate_domains(_fm, [d for d in TRAIN_ORDER if d in PREPARED], TRAIN_ORDER[-1], csv_out=SEQ_CSV_TRAINSLOTS)
+        finally:
+            OFFICIAL_EVAL_SLOT_RECONSTRUCTION = _flag
+    del _fm
+
 
 # %% [markdown]
 # ## Unseen-domain generalisation (port of `scripts/eval_unseen.sh`)

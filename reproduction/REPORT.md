@@ -250,7 +250,7 @@ run reproduced the same metrics exactly.
 | CLIP weights: OpenAI URL → HF mirror fallback | Kaggle network reliability | same weights |
 | 4 data-loader workers | Kaggle has 4 vCPUs | speed only |
 
-**Running it:** see the notebook's first cells. In short: T4 x2 + Internet on, attach the datasets, run once with
+**Running it:** see the notebook's first cells. In short: T4 x2 + Internet on, attach the four Kaggle datasets (§8.1), run once with
 `RUN_MODE="quick"` (about 5 min), then `RUN_MODE="full"` with *Save & Run All*. Expect about 6–8 h on one T4
 (MSMT17 is the longest step). If the 12 h limit is hit, attach the run's output as an input and rerun, and finished
 domains are skipped.
@@ -260,6 +260,38 @@ Market-1501 `pengcw1/market-1501` · DukeMTMC-reID `whurobin/dukemtmcreid` · MS
 CUHK03 `priyanagda/cuhk03` · CUHK-SYSU: official site (not found on Kaggle; upload privately) · unseen test sets:
 the DualNorm release (Google Drive id `1-5JqXxqQ14MCngGLMPqiA-zbI2CUBFxV`). Note that DukeMTMC-reID was withdrawn
 by its creators in 2019. Check your institution's policy on using it.
+
+### 8.1 Kaggle-only protocol (`PROTOCOL = "kaggle-4"`, the notebook default)
+
+CUHK-SYSU and the seven unseen test sets are not on Kaggle, so by default the notebook runs the paper's
+**AKA order-1 sequence with CUHK-SYSU left out**:
+
+**Market-1501 → DukeMTMC-reID → MSMT17 → CUHK03** (Kaggle: `pengcw1/market-1501`, `whurobin/dukemtmcreid`,
+`achrafabid7/msmt17`, `priyanagda/cuhk03`)
+
+| What stays the same as the paper | What changes |
+|---|---|
+| CLIP ViT-B/16 start, both stages, every loss and weight, all LRs, epochs, batch sizes, and per-domain overrides (Market as the first domain without KD; MSMT17 longer schedule; CUHK03 batch 48, erasing 0.6, 4 new slots), seed, single GPU, and evaluation metric | 4 steps instead of 5, so there is one fewer domain to forget through |
+| Prompt-pool mechanics (8 new slots per domain, 4 for CUHK03, old slots frozen) | the pool ends at **28 / 36** slots instead of full |
+| | no Unseen-Avg (no unseen sets on Kaggle); this part is skipped automatically |
+
+**How to read the results.** The paper has no published 4-domain numbers, so the notebook compares against the
+paper's 5-domain numbers **for the same four domains** (paper average over Market/Duke/MSMT17/CUHK03: 63.2 mAP /
+76.2 R1). Expected direction of the gap:
+* **Market and Duke** should come out *equal or a little higher* than the paper, because the model passes through
+  one fewer later domain and has less chance to forget them.
+* **MSMT17 and CUHK03** are trained in the same position relative to the end of the sequence, so they should land
+  *close to* the paper's numbers.
+* A result clearly *below* the paper on the last two domains, or far below on Market/Duke, would be a meaningful
+  sign of a reproduction problem. That is the useful check to report to your guide.
+
+**Prompt slots when the pool is not full.** Because the pool ends at 28/36, observation §7.3 now affects the
+*final* numbers: the official test script lets top-k also pick the 8 never-trained random slots. The notebook
+therefore evaluates the final model **twice** and prints both: (a) the official way (all 36 slots, for fidelity),
+and (b) with only the 28 trained slots (`final_eval_trained_slots.csv`). Report (a) as "official code behaviour" and
+(b) as a sanity variant. A large gap between them is itself a finding worth mentioning.
+
+To run the full paper protocol later, upload CUHK-SYSU as a private Kaggle dataset and set `PROTOCOL = "paper-5"`.
 
 ## 9. Suggested follow-up experiments (cheap, informative)
 

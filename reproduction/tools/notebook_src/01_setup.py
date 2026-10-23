@@ -7,11 +7,15 @@
 # Only the infrastructure is new: Kaggle data discovery and conversion, checkpoint/resume across sessions, a
 # memory-safe evaluator that gives identical numbers, and result tables and plots.
 #
-# **What it reproduces**
-# * **Seen domains (AKA order-1):** Market-1501 → CUHK-SYSU → DukeMTMC-reID → MSMT17 → CUHK03, trained one after
-#   the other with no stored exemplars. After every step it evaluates all domains seen so far (mAP / Rank-1).
-# * **Unseen domains (optional):** CUHK01, CUHK02, GRID, i-LIDS, PRID, SenseReID, and VIPeR, using the repo's
-#   split/direction averaging protocol. Each one runs only if you attach that dataset.
+# **What it reproduces**: pick one with `PROTOCOL` in the config cell.
+# * **`"kaggle-4"` (default):** uses only the datasets that are on Kaggle, i.e. **Market-1501 → DukeMTMC-reID →
+#   MSMT17 → CUHK03**. This is AKA order-1 with CUHK-SYSU left out. Every hyper-parameter, loss, and per-domain
+#   setting stays exactly as in the paper's code, so the only difference is one fewer domain in the sequence.
+# * **`"paper-5"`:** the full AKA order-1 sequence, Market-1501 → CUHK-SYSU → DukeMTMC-reID → MSMT17 → CUHK03. It
+#   needs CUHK-SYSU, which you have to upload yourself.
+# * After every step the notebook evaluates all domains seen so far (mAP / Rank-1). No stored exemplars are used.
+# * **Unseen domains (optional):** CUHK01, CUHK02, GRID, i-LIDS, PRID, SenseReID, and VIPeR. None of these are on
+#   Kaggle, so this part is skipped automatically unless you upload them.
 #
 # **How to run on Kaggle**
 # 1. *Settings → Accelerator → GPU T4 x2* (the notebook pins **one** GPU, as the authors did for every reported
@@ -22,20 +26,27 @@
 # 4. If a session ends early, attach this notebook's own output as an input and run again. Domains that already
 #    finished are found and skipped (see `RESUME`).
 #
-# **Estimated full-run time on one T4:** about 6–8 h of training plus about 30 min of evaluation (the MSMT17 step
-# is the longest, about 2.5 h).
+# **Estimated full-run time on one T4:** `kaggle-4` takes about 5–6.5 h; `paper-5` takes about 6–8 h. The MSMT17
+# step is the longest at about 2.5 h. If the 12 h limit is hit, use the resume step above.
 
 # %% [markdown]
 # ## Datasets to attach (Kaggle "Add Input")
 #
-# | Domain (order-1) | Kaggle dataset (search the slug in *Add Input*) | Notes |
+# **For the default `kaggle-4` protocol, attach these four Kaggle datasets:**
+#
+# | Step | Domain | Kaggle dataset (search the slug in *Add Input*) | Notes |
+# |---|---|---|---|
+# | 1 | Market-1501 | [`pengcw1/market-1501`](https://www.kaggle.com/datasets/pengcw1/market-1501) (alt: `rayiooo/reid_market-1501`) | standard `bounding_box_train / query / bounding_box_test` |
+# | 2 | DukeMTMC-reID | [`whurobin/dukemtmcreid`](https://www.kaggle.com/datasets/whurobin/dukemtmcreid) (alt: `igorkrashenyi/dukemtmc-reid`) | standard layout |
+# | 3 | MSMT17 | [`achrafabid7/msmt17`](https://www.kaggle.com/datasets/achrafabid7/msmt17) | V1 (`train/ test/ list_*.txt`) or V2 (`mask_train_v2/ mask_test_v2/`); both handled |
+# | 4 | CUHK03 | [`priyanagda/cuhk03`](https://www.kaggle.com/datasets/priyanagda/cuhk03) | raw `cuhk-03.mat`, converted here with the CUHK03-NP (new-protocol, *detected*) split. The small split file `cuhk03_new_protocol_config_detected.mat` is used if attached, otherwise it is downloaded from its original source (Zhong et al., person-re-ranking), so keep Internet on |
+#
+# **Only needed for `paper-5` / unseen evaluation (not on Kaggle; upload as private datasets):**
+#
+# | Domain | Source | Notes |
 # |---|---|---|
-# | Market-1501 | `pengcw1/market-1501` (alt: `rayiooo/reid_market-1501`) | standard `bounding_box_train / query / bounding_box_test` |
-# | CUHK-SYSU | *not on Kaggle as far as we know*: download from the official page (http://www.ee.cuhk.edu.hk/~xgwang/PS/dataset.html) and upload it as a private Kaggle dataset | raw person-search release (`Image/SSM` + `annotation/`) **or** an already converted `cuhksysu4reid/{train,query,gallery}`. Both are converted automatically |
-# | DukeMTMC-reID | `whurobin/dukemtmcreid` | standard layout |
-# | MSMT17 | `achrafabid7/msmt17` | V1 (`train/ test/ list_*.txt`) or V2 (`mask_train_v2/ mask_test_v2/`); both handled |
-# | CUHK03 | `priyanagda/cuhk03` | raw `cuhk-03.mat`, converted here with the CUHK03-NP (new-protocol, *detected*) split. The split file `cuhk03_new_protocol_config_detected.mat` is used if attached, otherwise it is fetched from its original source (Zhong et al., person-re-ranking) |
-# | Unseen (optional) | test sets distributed with DualNorm (BMVC'19): Google Drive `1-5JqXxqQ14MCngGLMPqiA-zbI2CUBFxV`. Upload as a private dataset | VIPeR `cam_a/cam_b`, GRID `probe/gallery + features_and_partitions.mat`, PRID `single_shot`, i-LIDS `i-LIDS_Pedestrian/Persons`, CUHK01 `campus`, CUHK02 `Dataset/P5`, SenseReID `test_probe/test_gallery` |
+# | CUHK-SYSU | http://www.ee.cuhk.edu.hk/~xgwang/PS/dataset.html | raw person-search release (`Image/SSM` + `annotation/`) **or** an already converted `cuhksysu4reid/{train,query,gallery}`. Both are converted automatically |
+# | Unseen sets | DualNorm (BMVC'19) test-set bundle: Google Drive `1-5JqXxqQ14MCngGLMPqiA-zbI2CUBFxV` | VIPeR `cam_a/cam_b`, GRID `probe/gallery + features_and_partitions.mat`, PRID `single_shot`, i-LIDS `i-LIDS_Pedestrian/Persons`, CUHK01 `campus`, CUHK02 `Dataset/P5`, SenseReID `test_probe/test_gallery` |
 #
 # If auto-discovery picks the wrong folder, set `DATA_OVERRIDES` in the config cell. These slugs were found by web
 # search, so check that the folder layout matches before you run.
@@ -91,8 +102,15 @@ print(f"torch {torch.__version__} | timm {timm.__version__} | device {DEVICE} | 
 # %%
 RUN_MODE = os.environ.get("PAD_RUN_MODE", "quick")   # "quick" = smoke test (minutes) | "full" = paper protocol
 
-# Which seen domains to train, in order (AKA order-1 = the official configs/pad.yml order).
-TRAIN_ORDER = ["market1501", "cuhksysu", "dukemtmcreid", "msmt17", "cuhk03"]
+# Which seen domains to train, in order.
+#   "kaggle-4": Market-1501 -> DukeMTMC-reID -> MSMT17 -> CUHK03 (all on Kaggle; AKA order-1 without CUHK-SYSU)
+#   "paper-5" : Market-1501 -> CUHK-SYSU -> DukeMTMC-reID -> MSMT17 -> CUHK03 (AKA order-1, as in the paper)
+PROTOCOL = os.environ.get("PAD_PROTOCOL", "kaggle-4")
+TRAIN_ORDER = {
+    "kaggle-4": ["market1501", "dukemtmcreid", "msmt17", "cuhk03"],
+    "paper-5": ["market1501", "cuhksysu", "dukemtmcreid", "msmt17", "cuhk03"],
+}[PROTOCOL]
+SKIP_MISSING_DOMAINS = True  # True: leave out any domain whose data isn't attached (with a warning) instead of stopping
 RUN_UNSEEN_EVAL = True      # evaluate the final model on any attached unseen datasets
 RESUME = True               # skip domains whose checkpoint already exists (in OUT_DIR or in an attached old output)
 
@@ -118,4 +136,4 @@ NUM_WORKERS = min(4, os.cpu_count() or 2)   # Kaggle has 4 vCPUs (official confi
 
 # Quick mode: tiny schedule so the whole pipeline runs end-to-end in a few minutes.
 QUICK = dict(stage1_epochs=1, stage2_epochs=1, max_iters_per_epoch=10, eval_max_query=300, eval_max_gallery=3000)
-print("RUN_MODE =", RUN_MODE, "| DATA_ROOT =", DATA_ROOT, "| OUT_DIR =", OUT_DIR)
+print("PROTOCOL =", PROTOCOL, "| order:", " -> ".join(TRAIN_ORDER), "| RUN_MODE =", RUN_MODE, "| DATA_ROOT =", DATA_ROOT, "| OUT_DIR =", OUT_DIR)

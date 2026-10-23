@@ -3,6 +3,8 @@
 # * **Matrix**: row = after training step *t*, column = evaluation domain. Values on the diagonal are just-learned
 #   performance. Reading down a column shows how much of that domain is **forgotten** later.
 # * **Final row** (after CUHK03): the numbers the paper reports in Table 1, i.e. per-domain mAP/R1 and Seen-Avg.
+#   With `PROTOCOL="kaggle-4"`, the comparison uses the paper's numbers for the same 4 domains. Those numbers come
+#   from the 5-domain run, so the comparison is close but not exact (see the note printed below the table).
 #
 # `PAPER_REPORTED` holds the PAD numbers for AKA order-1 as quoted from the paper (arXiv 2605.05027). **Check them
 # against Table 1 of the PDF before you report anything.** The paper also gives a 7-seed mean of 70.30 ± 0.49 mAP /
@@ -43,10 +45,28 @@ if steps:
         if d in res[final]:
             m, r = res[final][d]; pm, pr = PAPER_REPORTED[d]; ours_m.append(m); ours_r.append(r)
             print(f"{SHORT[d]:12s}{m:10.1f}{pm:8.1f}{m - pm:+7.1f}{r:10.1f}{pr:8.1f}{r - pr:+7.1f}")
-    if len(ours_m) == 5:
-        pm = np.mean([v[0] for v in PAPER_REPORTED.values()]); pr = np.mean([v[1] for v in PAPER_REPORTED.values()])
+    if ours_m:
+        doms_f = [d for d in TRAIN_ORDER if d in res[final]]
+        pm = np.mean([PAPER_REPORTED[d][0] for d in doms_f]); pr = np.mean([PAPER_REPORTED[d][1] for d in doms_f])
         print(f"{'Seen-Avg':12s}{np.mean(ours_m):10.1f}{pm:8.1f}{np.mean(ours_m) - pm:+7.1f}"
-              f"{np.mean(ours_r):10.1f}{pr:8.1f}{np.mean(ours_r) - pr:+7.1f}   (paper 7-seed: {PAPER_SEEN_AVG_7SEEDS})")
+              f"{np.mean(ours_r):10.1f}{pr:8.1f}{np.mean(ours_r) - pr:+7.1f}   (average over the {len(doms_f)} domains above)")
+        if len(doms_f) == 5:
+            print(f"paper 7-seed Seen-Avg: {PAPER_SEEN_AVG_7SEEDS}")
+        else:
+            print("NOTE: the paper's numbers come from the 5-domain sequence (with CUHK-SYSU). With fewer domains there is\n"
+                  "one fewer step to forget through, and MSMT17/CUHK03 get different prompt slots, so expect earlier domains\n"
+                  "(Market, Duke) to score somewhat HIGHER than the paper. Treat this as a close check, not an exact match.")
+
+    tsc = osp.join(OUT_DIR, "final_eval_trained_slots.csv")
+    if osp.exists(tsc):
+        with open(tsc) as f:
+            alt = {r["eval_domain"]: (100 * float(r["map"]), 100 * float(r["rank1"])) for r in csv.DictReader(f)}
+        print(f"\nFinal model, evaluated with ONLY its trained prompt slots (pool not full; official script uses all 36):")
+        for d in TRAIN_ORDER:
+            if d in alt and d in res[final]:
+                print(f"  {SHORT[d]:10s} mAP {alt[d][0]:5.1f} (official eval {res[final][d][0]:5.1f})   "
+                      f"R1 {alt[d][1]:5.1f} (official eval {res[final][d][1]:5.1f})")
+        print(f"  {'Seen-Avg':10s} mAP {np.mean([v[0] for v in alt.values()]):5.1f}   R1 {np.mean([v[1] for v in alt.values()]):5.1f}")
 
     # Forgetting: best-ever mAP on a domain minus its final mAP (only domains seen before the last step).
     print("\nForgetting (best mAP during the sequence − final mAP):")
@@ -90,7 +110,7 @@ if steps:
                     ha="center", va="bottom", fontsize=8, color="#52514e")
     ax.set_xticks(x, [SHORT[d] for d in doms])
     ax.set_ylabel("mAP (%)"); ax.set_ylim(0, 105)
-    ax.set_title(f"Final mAP after {SHORT[final]}: reproduction vs paper", loc="left", fontsize=11)
+    ax.set_title(f"Final mAP after {SHORT[final]} ({PROTOCOL}): reproduction vs paper (5-domain)", loc="left", fontsize=11)
     ax.grid(axis="y", color="#e6e5e0", linewidth=0.8); ax.set_axisbelow(True)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)

@@ -263,6 +263,14 @@ if src:
 
 missing = [d for d in TRAIN_ORDER if d not in PREPARED]
 print("\nprepared:", sorted(PREPARED))
-if missing:
+if missing and SKIP_MISSING_DOMAINS:
+    TRAIN_ORDER = [d for d in TRAIN_ORDER if d in PREPARED]
+    print(f"!! not attached, LEFT OUT of the sequence: {missing}")
+elif missing:
     print(f"!! MISSING seen domains: {missing}. Attach them (see table above) or set DATA_OVERRIDES. "
           f"Training will stop when it reaches the first missing domain.")
+assert TRAIN_ORDER, "no seen-domain dataset found under INPUT_ROOT -- attach the Kaggle datasets listed above"
+if TRAIN_ORDER[0] != "market1501":
+    print("!! Market-1501 is not the first domain: the first-domain schedule (no KD, full tuning) is applied to "
+          f"'{TRAIN_ORDER[0]}' with its own per-domain settings, so this no longer matches the paper's order.")
+print("training order:", " -> ".join(TRAIN_ORDER))
