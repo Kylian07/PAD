@@ -111,7 +111,12 @@ TRAIN_ORDER = {
     "paper-5": ["market1501", "cuhksysu", "dukemtmcreid", "msmt17", "cuhk03"],
 }[PROTOCOL]
 SKIP_MISSING_DOMAINS = True  # True: leave out any domain whose data isn't attached (with a warning) instead of stopping
-RUN_UNSEEN_EVAL = True      # evaluate the final model on any attached unseen datasets
+RUN_UNSEEN_EVAL = True      # evaluate the final model on the unseen datasets that are available
+# Unseen test sets that are publicly downloadable (no request form) are fetched automatically:
+# VIPeR, GRID, i-LIDS (original university links, with an Internet Archive fallback) and SenseReID (Google Drive).
+# CUHK01/CUHK02 need a request form and PRID2011 has no stable direct file link, so attach those yourself if you have them.
+DOWNLOAD_PUBLIC_UNSEEN = True
+PRID_ZIP_URL = ""           # optional: paste the prid_2011.zip link from the TU Graz PRID page to fetch PRID too
 RESUME = True               # skip domains whose checkpoint already exists (in OUT_DIR or in an attached old output)
 
 # Faithfulness switch for intermediate evaluations (see the report, Sec. "Implementation observations"):

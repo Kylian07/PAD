@@ -316,5 +316,12 @@ if RUN_UNSEEN_EVAL and last_domain and avail:
         print(f"{d:10s} Rank-1 {r1:6.2f}  mAP {mp:6.2f}")
     print(f"Unseen-Avg ({len(unseen_summary)} sets): Rank-1 {statistics.mean(v[0] for v in unseen_summary.values()):.2f}  "
           f"mAP {statistics.mean(v[1] for v in unseen_summary.values()):.2f}")
+    if len(unseen_summary) < 7:
+        print(f"NOTE: averaged over {len(unseen_summary)} of the paper's 7 unseen sets "
+              f"({', '.join(sorted(unseen_summary))}); compare per dataset, not with the paper's 7-set Unseen-Avg.")
+    with open(osp.join(OUT_DIR, "unseen_summary.csv"), "w", newline="") as f:
+        w = csv.writer(f); w.writerow(["dataset", "runs", "rank1", "map"])
+        for d, (r1, mp) in unseen_summary.items():
+            w.writerow([d, UNSEEN_PROTOCOL[d] if RUN_MODE == "full" else 1, f"{r1:.2f}", f"{mp:.2f}"])
 else:
     print("unseen evaluation skipped (no unseen datasets attached, or no trained checkpoint yet)")

@@ -273,7 +273,7 @@ CUHK-SYSU and the seven unseen test sets are not on Kaggle, so by default the no
 |---|---|
 | CLIP ViT-B/16 start, both stages, every loss and weight, all LRs, epochs, batch sizes, and per-domain overrides (Market as the first domain without KD; MSMT17 longer schedule; CUHK03 batch 48, erasing 0.6, 4 new slots), seed, single GPU, and evaluation metric | 4 steps instead of 5, so there is one fewer domain to forget through |
 | Prompt-pool mechanics (8 new slots per domain, 4 for CUHK03, old slots frozen) | the pool ends at **28 / 36** slots instead of full |
-| | no Unseen-Avg (no unseen sets on Kaggle); this part is skipped automatically |
+| | unseen evaluation on the **publicly downloadable** sets only (see below), not all 7 |
 
 **How to read the results.** The paper has no published 4-domain numbers, so the notebook compares against the
 paper's 5-domain numbers **for the same four domains** (paper average over Market/Duke/MSMT17/CUHK03: 63.2 mAP /
@@ -290,6 +290,25 @@ paper's 5-domain numbers **for the same four domains** (paper average over Marke
 therefore evaluates the final model **twice** and prints both: (a) the official way (all 36 slots, for fidelity),
 and (b) with only the 28 trained slots (`final_eval_trained_slots.csv`). Report (a) as "official code behaviour" and
 (b) as a sanity variant. A large gap between them is itself a finding worth mentioning.
+
+**Unseen domains with public data.** None of the 7 unseen sets are on Kaggle, so the notebook downloads the ones
+that are public without a request form (`DOWNLOAD_PUBLIC_UNSEEN = True`; Internet must be on):
+
+| Set | How it is obtained | Protocol (same as the paper's script) |
+|---|---|---|
+| VIPeR | original UCSC zip, Internet Archive fallback, MD5-verified | 20 runs (10 splits × 2 directions) |
+| GRID | original CUHK/QMUL zip, Internet Archive fallback | 10 official folds |
+| i-LIDS (QMUL pedestrian) | original QMUL tgz, Internet Archive fallback | 10 random splits |
+| SenseReID | Google Drive (`gdown`) | 1 fixed split |
+| PRID2011 | optional: paste the `prid_2011.zip` link from the TU Graz page into `PRID_ZIP_URL` | 10 splits |
+| CUHK01 / CUHK02 | request form only; attach if you have them | 20 runs / 1 split |
+
+These hosts are old university servers, so a source can be offline on the day you run. Each set falls back to the
+next source, and a set that cannot be fetched is skipped with a message (the notebook's log shows exactly which
+sets were evaluated). The printed **Unseen-Avg covers only the available sets**, so it is *not* comparable to the
+paper's 7-set Unseen-Avg. Compare per dataset instead (results in `unseen_summary.csv`). The DualNorm test-set
+bundle is not used: it re-packs the sets into per-identity folders with fixed splits, which does not match the
+official PAD loaders or the random-split protocol.
 
 To run the full paper protocol later, upload CUHK-SYSU as a private Kaggle dataset and set `PROTOCOL = "paper-5"`.
 

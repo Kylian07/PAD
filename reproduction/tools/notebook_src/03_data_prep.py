@@ -231,6 +231,130 @@ else:
             print(f"[data] cuhk03        <- market-style {src}")
 
 
+# %% [markdown]
+# ### Public unseen test sets (automatic download)
+# None of the paper's 7 unseen datasets are on Kaggle. Four are publicly downloadable without a request form, so this
+# cell fetches them directly (Internet must be on). Each one has several sources tried in order: the original
+# university link that torchreid/Open-ReID use, then an Internet Archive (Wayback Machine) copy of the same file.
+# Archives are integrity-checked (and VIPeR's MD5 is verified) and extracted safely, and any source that fails is
+# skipped with a message, so the rest of the notebook always runs.
+#
+# | Set | Status | Source |
+# |---|---|---|
+# | VIPeR | auto | users.soe.ucsc.edu/~manduchi/VIPeR.v1.0.zip (MD5 `1c2d9fc1…`) |
+# | GRID | auto | personal.ie.cuhk.edu.hk/~ccloy/files/datasets/underground_reid.zip |
+# | i-LIDS (QMUL pedestrian) | auto | eecs.qmul.ac.uk/~jason/data/i-LIDS_Pedestrian.tgz |
+# | SenseReID | auto | Google Drive file `0B56OfSrVI8hubVJLTzkwV2VaOWM` (via `gdown`) |
+# | PRID2011 | optional | paste the `prid_2011.zip` link from the TU Graz page into `PRID_ZIP_URL`, or attach it |
+# | CUHK01 / CUHK02 | attach only | request form at CUHK; upload as a private Kaggle dataset if you have them |
+
+# %%
+import tarfile, zipfile
+
+UNSEEN_DL_ROOT = osp.join(_tmp_base, "pad_unseen_downloads")
+_WB = "https://web.archive.org/web/2020id_/"   # Wayback "id_" = the original file bytes, nearest snapshot to 2020
+UNSEEN_PUBLIC_SOURCES = {
+    "viper": {"urls": ["http://users.soe.ucsc.edu/~manduchi/VIPeR.v1.0.zip",
+                       _WB + "http://users.soe.ucsc.edu/~manduchi/VIPeR.v1.0.zip"],
+              "md5": "1c2d9fc1cc800332567a0da25a1ce68c", "file": "VIPeR.v1.0.zip"},
+    "grid": {"urls": ["http://personal.ie.cuhk.edu.hk/~ccloy/files/datasets/underground_reid.zip",
+                      _WB + "http://personal.ie.cuhk.edu.hk/~ccloy/files/datasets/underground_reid.zip"],
+             "file": "underground_reid.zip"},
+    "ilids": {"urls": ["http://www.eecs.qmul.ac.uk/~jason/data/i-LIDS_Pedestrian.tgz",
+                       _WB + "http://www.eecs.qmul.ac.uk/~jason/data/i-LIDS_Pedestrian.tgz"],
+              "file": "i-LIDS_Pedestrian.tgz"},
+    "sensereid": {"gdrive": "0B56OfSrVI8hubVJLTzkwV2VaOWM", "file": "SenseReID.zip"},
+}
+if PRID_ZIP_URL:
+    UNSEEN_PUBLIC_SOURCES["prid"] = {"urls": [PRID_ZIP_URL], "file": "prid_2011.zip"}
+if os.environ.get("PAD_UNSEEN_SOURCES_JSON"):   # testing hook: override the source list
+    UNSEEN_PUBLIC_SOURCES = json.loads(os.environ["PAD_UNSEEN_SOURCES_JSON"])
+
+# Folder signatures used to tell whether a set is already available (attached input or earlier download).
+UNSEEN_SIGNATURES = {
+    "viper": lambda d: osp.isdir(osp.join(d, "cam_a")) and osp.isdir(osp.join(d, "cam_b")) and _has_images(osp.join(d, "cam_a"), (".bmp",)),
+    "grid": lambda d: osp.isdir(osp.join(d, "probe")) and osp.isfile(osp.join(d, "features_and_partitions.mat")),
+    "ilids": lambda d: osp.basename(d) == "Persons" and _has_images(d, (".jpg",)),
+    "sensereid": lambda d: osp.isdir(osp.join(d, "test_probe")) and osp.isdir(osp.join(d, "test_gallery")),
+    "prid": lambda d: osp.basename(d) == "single_shot" and osp.isdir(osp.join(d, "cam_a")),
+}
+
+
+def _safe_extract(archive, dest):
+    """Extract only regular files/dirs that stay inside dest (archives from the web are untrusted)."""
+    dest_real = osp.realpath(dest)
+    os.makedirs(dest, exist_ok=True)
+
+    def _inside(name):
+        target = osp.realpath(osp.join(dest, name))
+        return target == dest_real or target.startswith(dest_real + os.sep)
+
+    if zipfile.is_zipfile(archive):
+        with zipfile.ZipFile(archive) as z:
+            for m in z.infolist():
+                if _inside(m.filename):
+                    z.extract(m, dest)
+    elif tarfile.is_tarfile(archive):
+        with tarfile.open(archive) as t:
+            members = [m for m in t.getmembers() if (m.isfile() or m.isdir()) and _inside(m.name)]
+            t.extractall(dest, members=members)
+    else:
+        raise RuntimeError("not a zip/tar archive (probably an HTML error page)")
+
+
+def _download_url(url, out, timeout=120):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (PAD reproduction notebook)"})
+    with urllib.request.urlopen(req, timeout=timeout) as r, open(out + ".part", "wb") as f:
+        shutil.copyfileobj(r, f, length=1 << 20)
+    os.replace(out + ".part", out)
+
+
+def fetch_public_unseen(name, spec):
+    dest = osp.join(UNSEEN_DL_ROOT, name)
+    done_flag = osp.join(dest, ".extracted")
+    if osp.isfile(done_flag):
+        return "already downloaded"
+    os.makedirs(dest, exist_ok=True)
+    archive = osp.join(UNSEEN_DL_ROOT, spec["file"])
+    errors = []
+    attempts = [("gdrive", spec["gdrive"])] if spec.get("gdrive") else []
+    attempts += [("url", u) for u in spec.get("urls", [])]
+    for kind, src in attempts:
+        try:
+            if kind == "gdrive":
+                try:
+                    import gdown
+                except ImportError:
+                    import subprocess
+                    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "gdown"], check=True)
+                    import gdown
+                if gdown.download(id=src, output=archive, quiet=True) is None:
+                    raise RuntimeError("gdown returned nothing (quota or permissions)")
+            else:
+                _download_url(src, archive)
+            if spec.get("md5") and hashlib.md5(open(archive, "rb").read()).hexdigest() != spec["md5"]:
+                raise RuntimeError("MD5 mismatch")
+            _safe_extract(archive, dest)
+            open(done_flag, "w").write(src)
+            os.remove(archive)
+            return f"ok <- {src}"
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{src[:70]}...: {type(e).__name__}: {str(e)[:80]}")
+            if osp.exists(archive):
+                os.remove(archive)
+    return "FAILED\n      " + "\n      ".join(errors)
+
+
+if DOWNLOAD_PUBLIC_UNSEEN and RUN_UNSEEN_EVAL:
+    os.makedirs(UNSEEN_DL_ROOT, exist_ok=True)
+    for name, spec in UNSEEN_PUBLIC_SOURCES.items():
+        if name in UNSEEN_SIGNATURES and _find(UNSEEN_SIGNATURES[name]):
+            print(f"[unseen] {name:10s} already attached as a Kaggle input, not downloading")
+            continue
+        print(f"[unseen] {name:10s} {fetch_public_unseen(name, spec)}")
+    ALL_INPUT_DIRS += _list_dirs(UNSEEN_DL_ROOT)   # make downloads visible to the discovery below
+
+# %%
 # ---------- unseen-domain sets (optional) ----------------------------------------------------------------------------
 def _link_unseen(name, src, rel):
     _symlink(src, osp.join(DATA_ROOT, name, rel)); PREPARED[name] = osp.join(DATA_ROOT, name)
