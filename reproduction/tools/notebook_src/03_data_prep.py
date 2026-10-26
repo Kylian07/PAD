@@ -14,7 +14,7 @@
 # ```
 
 # %%
-def _list_dirs(root, max_depth=7):
+def _list_dirs(root, max_depth=11):   # Kaggle now mounts at /kaggle/input/datasets/<user>/<slug>/...
     """All directories under root (depth-limited, follows Kaggle's read-only mounts)."""
     out = []
     root = osp.abspath(root)
@@ -112,34 +112,68 @@ def _crop_save(img_path, box_xyxy, out_path):
     im.crop(tuple(int(round(v)) for v in box_xyxy)).save(out_path)
 
 
-def convert_cuhksysu_raw(ds_dir, out_dir):
-    """Raw CUHK-SYSU (Image/SSM + annotation/) -> train/query/gallery crops.
-    Same splits as the AKA benchmark's `cuhksysu4reid` (Train.mat, TestG50.mat queries + their gallery hits)."""
+def _mat_str(x):
+    """Unwrap a MATLAB char/cell value loaded by scipy into a Python str."""
+    while isinstance(x, np.ndarray):
+        if x.size == 0:
+            return ""
+        x = x.ravel()[0]
+    return str(x)
+
+
+def _mat_box(x):
+    """MATLAB [x y w h] -> float array [x1 y1 x2 y2]; empty array if the field is empty."""
+    b = np.asarray(x, dtype=object)
+    while b.dtype == object and b.size == 1 and isinstance(b.ravel()[0], np.ndarray):
+        b = b.ravel()[0]
+    b = np.asarray(b, dtype=np.float64).ravel()
+    if b.size < 4:
+        return np.zeros(0)
+    b = b[:4].copy(); b[2:] += b[:2]
+    return b
+
+
+def _find_file(name):
+    for d in ALL_INPUT_DIRS:
+        if osp.isfile(osp.join(d, name)):
+            return osp.join(d, name)
+    return None
+
+
+def convert_cuhksysu_raw(train_mat_path, test_mat_path, img_dir, out_dir):
+    """Raw CUHK-SYSU person-search release -> ReID crops with the AKA `cuhksysu4reid` splits:
+    train = all boxes of the 5,532 Train.mat identities; query = the 2,900 TestG50 query boxes;
+    gallery = the boxes of the query person found in its 50-image gallery (images without the person are skipped).
+    Port of LifelongReID/lreid/datasets/cuhksysu.py with defensive unwrapping of MATLAB fields."""
     from scipy.io import loadmat
-    img_dir, ann = osp.join(ds_dir, "Image", "SSM"), osp.join(ds_dir, "annotation")
-    train_mat = loadmat(osp.join(ann, "test", "train_test", "Train.mat"))["Train"].squeeze()
-    test_mat = loadmat(osp.join(ann, "test", "train_test", "TestG50.mat"))["TestG50"].squeeze()
-    for s in ("bounding_box_train", "query", "bounding_box_test"):
-        os.makedirs(osp.join(out_dir, s), exist_ok=True)
+    tmp = out_dir + ".partial"
+    shutil.rmtree(tmp, ignore_errors=True)
+    for sub in ("bounding_box_train", "query", "bounding_box_test"):
+        os.makedirs(osp.join(tmp, sub), exist_ok=True)
+    train_mat = loadmat(train_mat_path)["Train"].squeeze()
+    test_mat = loadmat(test_mat_path)["TestG50"].squeeze()
     k = 0
-    for item in train_mat:                                   # 5,532 identities
-        pid = int(item[0, 0][0][0][1:])
-        for im_name, box, _hard in item[0, 0][2].squeeze():
-            box = box.squeeze().astype(np.float64); box[2:] += box[:2]
-            _crop_save(osp.join(img_dir, str(im_name[0])), box,
-                       osp.join(out_dir, "bounding_box_train", f"{pid:05d}_c1_{k:07d}.jpg")); k += 1
+    for item in train_mat:                                            # 5,532 identities
+        rec = item[0, 0] if isinstance(item, np.ndarray) and item.dtype.names is None else item
+        rec = rec if not isinstance(rec, np.ndarray) else rec.ravel()[0]
+        pid = int(_mat_str(rec[0])[1:])                               # 'p01234' -> 1234
+        for scene in np.asarray(rec[2]).ravel():
+            box = _mat_box(scene[1])
+            if box.size:
+                _crop_save(osp.join(img_dir, _mat_str(scene[0])), box,
+                           osp.join(tmp, "bounding_box_train", f"{pid:05d}_c1_{k:07d}.jpg")); k += 1
     for query, gallery in zip(test_mat["Query"], test_mat["Gallery"]):   # 2,900 queries
-        pid = int(query["idname"][0, 0][0][1:])
-        roi = query["idlocate"][0, 0][0].astype(np.float64); roi[2:] += roi[:2]
-        _crop_save(osp.join(img_dir, str(query["imname"][0, 0][0])), roi,
-                   osp.join(out_dir, "query", f"{pid:05d}_c2_{k:07d}.jpg")); k += 1
-        for g in gallery.squeeze():
-            groi = g["idlocate"][0].astype(np.float64)
-            if groi.size == 0:                               # gallery image without the target -> no crop
+        pid = int(_mat_str(query["idname"])[1:])
+        _crop_save(osp.join(img_dir, _mat_str(query["imname"])), _mat_box(query["idlocate"]),
+                   osp.join(tmp, "query", f"{pid:05d}_c2_{k:07d}.jpg")); k += 1
+        for g in np.asarray(gallery).ravel():
+            gbox = _mat_box(g["idlocate"])
+            if gbox.size == 0:                                        # gallery image without the target person
                 continue
-            groi[2:] += groi[:2]
-            _crop_save(osp.join(img_dir, str(g["imname"][0])), groi,
-                       osp.join(out_dir, "bounding_box_test", f"{pid:05d}_c1_{k:07d}.jpg")); k += 1
+            _crop_save(osp.join(img_dir, _mat_str(g["imname"])), gbox,
+                       osp.join(tmp, "bounding_box_test", f"{pid:05d}_c1_{k:07d}.jpg")); k += 1
+    shutil.rmtree(out_dir, ignore_errors=True)
+    os.replace(tmp, out_dir)
 
 
 def relink_cuhksysu4reid(src, out_dir):
@@ -165,16 +199,24 @@ else:
     src4 = DATA_OVERRIDES.get("cuhksysu") or _find(
         lambda d: all(_has_images(osp.join(d, s)) for s in ("train", "query", "gallery")), "sysu")
     src_ms = _find(_market_style, "sysu")
-    src_raw = _find(lambda d: osp.isdir(osp.join(d, "Image", "SSM")) and osp.isdir(osp.join(d, "annotation")))
+    sysu_train_mat, sysu_test_mat = _find_file("Train.mat"), _find_file("TestG50.mat")
+    sysu_img_dir = _find(lambda d: osp.basename(d) == "SSM" and _has_images(d, (".jpg",)))
     if src4:
         relink_cuhksysu4reid(src4, sysu_out); PREPARED["cuhksysu"] = sysu_out
         print(f"[data] cuhksysu      <- cuhksysu4reid {src4}")
     elif src_ms:
         PREPARED["cuhksysu"] = _link_market_style(src_ms, "cuhksysu")
         print(f"[data] cuhksysu      <- market-style {src_ms} (check that query/gallery cameras differ!)")
-    elif src_raw:
-        print(f"[data] cuhksysu      converting raw person-search release {src_raw} (~5 min) ...")
-        convert_cuhksysu_raw(src_raw, sysu_out); PREPARED["cuhksysu"] = sysu_out
+    elif sysu_train_mat and sysu_test_mat and sysu_img_dir:
+        print(f"[data] cuhksysu      converting raw person-search release (images {sysu_img_dir}) ~5-10 min ...")
+        try:
+            convert_cuhksysu_raw(sysu_train_mat, sysu_test_mat, sysu_img_dir, sysu_out)
+            PREPARED["cuhksysu"] = sysu_out
+        except Exception as e:  # noqa: BLE001
+            print(f"!! cuhksysu conversion failed ({type(e).__name__}: {e}); the domain will be left out.")
+    elif _find(lambda d: True, "sysu"):
+        print("!! a CUHK-SYSU-like input is attached but its layout was not recognised "
+              "(need Image/SSM + annotation/test/train_test/{Train,TestG50}.mat, or cuhksysu4reid). See the tree below.")
 
 
 # ---------- CUHK03 (cuhk-03.mat -> CUHK03-NP detected) -----------------------------------------------------------------
@@ -249,7 +291,7 @@ else:
 # | CUHK01 / CUHK02 | attach only | request form at CUHK; upload as a private Kaggle dataset if you have them |
 
 # %%
-import tarfile, zipfile
+import tarfile, urllib.parse, zipfile
 
 UNSEEN_DL_ROOT = osp.join(_tmp_base, "pad_unseen_downloads")
 _WB = "https://web.archive.org/web/2020id_/"   # Wayback "id_" = the original file bytes, nearest snapshot to 2020
@@ -309,6 +351,19 @@ def _download_url(url, out, timeout=120):
     os.replace(out + ".part", out)
 
 
+def _wayback_captures(url, limit=3):
+    """Ask the Internet Archive index for saved copies (HTTP 200) of `url`; newest first."""
+    q = ("https://web.archive.org/cdx/search/cdx?output=json&fl=timestamp,original&filter=statuscode:200"
+         f"&limit=-{limit}&url=" + urllib.parse.quote(url.split("://", 1)[-1], safe=""))
+    try:
+        req = urllib.request.Request(q, headers={"User-Agent": "Mozilla/5.0 (PAD reproduction notebook)"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            rows = json.loads(r.read().decode() or "[]")
+        return [f"https://web.archive.org/web/{ts}id_/{orig}" for ts, orig in rows[1:]][::-1]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def fetch_public_unseen(name, spec):
     dest = osp.join(UNSEEN_DL_ROOT, name)
     done_flag = osp.join(dest, ".extracted")
@@ -319,7 +374,10 @@ def fetch_public_unseen(name, spec):
     errors = []
     attempts = [("gdrive", spec["gdrive"])] if spec.get("gdrive") else []
     attempts += [("url", u) for u in spec.get("urls", [])]
-    for kind, src in attempts:
+    looked_up = False
+    i = 0
+    while i < len(attempts):
+        kind, src = attempts[i]; i += 1
         try:
             if kind == "gdrive":
                 try:
@@ -342,6 +400,11 @@ def fetch_public_unseen(name, spec):
             errors.append(f"{src[:70]}...: {type(e).__name__}: {str(e)[:80]}")
             if osp.exists(archive):
                 os.remove(archive)
+        if i == len(attempts) and not looked_up:          # all fixed sources failed -> search the archive index
+            looked_up = True
+            for u in spec.get("urls", []):
+                if "web.archive.org" not in u:
+                    attempts += [("url", c) for c in _wayback_captures(u) if ("url", c) not in attempts]
     return "FAILED\n      " + "\n      ".join(errors)
 
 
@@ -384,6 +447,58 @@ if src:
     for s in ("probe", "gallery", "features_and_partitions.mat"):
         _symlink(osp.join(src, s), osp.join(DATA_ROOT, "grid", s))
     PREPARED["grid"] = osp.join(DATA_ROOT, "grid"); print(f"[data] grid          <- {src}")
+
+def _dataset_roots():
+    """Top folder of every attached Kaggle dataset (/kaggle/input/<slug> or /kaggle/input/datasets/<user>/<slug>)."""
+    roots = set()
+    for d in ALL_INPUT_DIRS:
+        rel = osp.relpath(d, INPUT_ROOT)
+        if rel.startswith(".."):
+            continue
+        parts = rel.split(os.sep)
+        if parts[0] == "datasets" and len(parts) >= 3:
+            roots.add(osp.join(INPUT_ROOT, *parts[:3]))
+        elif parts[0] not in (".", "datasets") and len(parts) >= 1:
+            roots.add(osp.join(INPUT_ROOT, parts[0]))
+    return sorted(roots)
+
+
+def _print_tree(root, depth=3, max_items=6, _lvl=0):
+    try:
+        entries = sorted(os.scandir(root), key=lambda e: (not e.is_dir(), e.name))
+    except OSError:
+        return
+    dirs = [e for e in entries if e.is_dir()]
+    files = [e for e in entries if not e.is_dir()]
+    pad = "    " * (_lvl + 1)
+    for e in dirs[:max_items]:
+        print(f"{pad}{e.name}/")
+        if _lvl + 1 < depth:
+            _print_tree(e.path, depth, max_items, _lvl + 1)
+    if len(dirs) > max_items:
+        print(f"{pad}... (+{len(dirs) - max_items} more folders)")
+    if files:
+        shown = ", ".join(f.name for f in files[:3])
+        print(f"{pad}[{len(files)} files: {shown}{', ...' if len(files) > 3 else ''}]")
+
+
+_used = set()
+for link_root, _, fnames in os.walk(DATA_ROOT):
+    for n in os.listdir(link_root):
+        q = osp.join(link_root, n)
+        if osp.islink(q):
+            _used.update({osp.abspath(os.readlink(q)), osp.realpath(q)})
+for extra in [globals().get("sysu_train_mat"), globals().get("sysu_img_dir")] + list(globals().get("mats") or []):
+    if extra:
+        _used.update({osp.abspath(extra), osp.realpath(extra)})
+for r in _dataset_roots():
+    keys = {osp.abspath(r), osp.realpath(r)}
+    if "pad_outputs" in r.lower() or any(u == k or u.startswith(k + os.sep) for u in _used for k in keys):
+        continue
+    if any(osp.isfile(osp.join(d, "ViT-B-16.pt")) for d in ALL_INPUT_DIRS if d.startswith(r)):
+        continue
+    print(f"\n?? attached input NOT used (layout not recognised): {r}")
+    _print_tree(r)
 
 missing = [d for d in TRAIN_ORDER if d not in PREPARED]
 print("\nprepared:", sorted(PREPARED))

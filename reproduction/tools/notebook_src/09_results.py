@@ -53,9 +53,9 @@ if steps:
         if len(doms_f) == 5:
             print(f"paper 7-seed Seen-Avg: {PAPER_SEEN_AVG_7SEEDS}")
         else:
-            print("NOTE: the paper's numbers come from the 5-domain sequence (with CUHK-SYSU). With fewer domains there is\n"
-                  "one fewer step to forget through, and MSMT17/CUHK03 get different prompt slots, so expect earlier domains\n"
-                  "(Market, Duke) to score somewhat HIGHER than the paper. Treat this as a close check, not an exact match.")
+            print("NOTE: the paper's numbers come from the full 5-domain sequence. With a domain left out there is one\n"
+                  "fewer step to forget through, so domains trained before the gap (e.g. Market, CUHK-SYSU, Duke) may score\n"
+                  "somewhat HIGHER than the paper. Treat this as a close check, not an exact match.")
 
     tsc = osp.join(OUT_DIR, "final_eval_trained_slots.csv")
     if osp.exists(tsc):

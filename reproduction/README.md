@@ -9,6 +9,7 @@
 | `tools/notebook_src/`, `tools/build_notebook.py` | Notebook source as plain `.py` cells, and the script that rebuilds the `.ipynb`. |
 
 Quick start on Kaggle: upload the notebook, choose *GPU T4 x2* with *Internet on*, attach the four Kaggle datasets
-(`pengcw1/market-1501`, `whurobin/dukemtmcreid`, `achrafabid7/msmt17`, `priyanagda/cuhk03`; the default `PROTOCOL = "kaggle-4"`
-runs Market → Duke → MSMT17 → CUHK03, i.e. the paper's order without CUHK-SYSU, see REPORT.md §8.1). Keep Internet on: the
+(`pengcw1/market-1501`, `manaschaiaonon/cuhk-sysu`, `whurobin/dukemtmcreid`, `priyanagda/cuhk03`; the default
+`PROTOCOL = "kaggle-4"` runs Market → CUHK-SYSU → Duke → CUHK03, i.e. the paper's order without MSMT17, see REPORT.md §8.1).
+Do **not** attach `achrafabid7/msmt17` (it is a model checkpoint, not images). Keep Internet on: the
 notebook also downloads the publicly available unseen test sets (VIPeR, GRID, i-LIDS, SenseReID) by itself, run once with `RUN_MODE = "quick"`, then set `RUN_MODE = "full"` and use *Save & Run All*.

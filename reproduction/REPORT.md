@@ -255,35 +255,39 @@ run reproduced the same metrics exactly.
 (MSMT17 is the longest step). If the 12 h limit is hit, attach the run's output as an input and rerun, and finished
 domains are skipped.
 
-**Datasets** (Kaggle slugs found by web search; check the layout before running):
-Market-1501 `pengcw1/market-1501` · DukeMTMC-reID `whurobin/dukemtmcreid` · MSMT17 `achrafabid7/msmt17` ·
-CUHK03 `priyanagda/cuhk03` · CUHK-SYSU: official site (not found on Kaggle; upload privately) · unseen test sets:
-the DualNorm release (Google Drive id `1-5JqXxqQ14MCngGLMPqiA-zbI2CUBFxV`). Note that DukeMTMC-reID was withdrawn
-by its creators in 2019. Check your institution's policy on using it.
+**Datasets:** see §8.1. On Kaggle: Market-1501 `pengcw1/market-1501`, DukeMTMC-reID `whurobin/dukemtmcreid`,
+CUHK03 `priyanagda/cuhk03` (these three confirmed by a real Kaggle run), CUHK-SYSU `manaschaiaonon/cuhk-sysu`.
+MSMT17 images are not on Kaggle (request from the authors). Unseen sets are downloaded by the notebook where
+public. Note that DukeMTMC-reID was withdrawn by its creators in 2019. Check your institution's policy on using it.
 
 ### 8.1 Kaggle-only protocol (`PROTOCOL = "kaggle-4"`, the notebook default)
 
-CUHK-SYSU and the seven unseen test sets are not on Kaggle, so by default the notebook runs the paper's
-**AKA order-1 sequence with CUHK-SYSU left out**:
+The MSMT17 images and the seven unseen test sets are not on Kaggle, so by default the notebook runs the paper's
+**AKA order-1 sequence with MSMT17 left out**:
 
-**Market-1501 → DukeMTMC-reID → MSMT17 → CUHK03** (Kaggle: `pengcw1/market-1501`, `whurobin/dukemtmcreid`,
-`achrafabid7/msmt17`, `priyanagda/cuhk03`)
+**Market-1501 → CUHK-SYSU → DukeMTMC-reID → CUHK03** (Kaggle: `pengcw1/market-1501`, `manaschaiaonon/cuhk-sysu`,
+`whurobin/dukemtmcreid`, `priyanagda/cuhk03`)
+
+*Correction to an earlier version of this kit:* `achrafabid7/msmt17` on Kaggle contains a pretrained CLIP-ReID
+**model checkpoint**, not the MSMT17 images, so it must not be attached. The notebook now flags any attached input
+it cannot use and prints its folder tree. MSMT17 has to be requested from its authors
+(http://www.pkuvmc.com/publications/msmt17.html); with it, set `PROTOCOL = "paper-5"`.
 
 | What stays the same as the paper | What changes |
 |---|---|
-| CLIP ViT-B/16 start, both stages, every loss and weight, all LRs, epochs, batch sizes, and per-domain overrides (Market as the first domain without KD; MSMT17 longer schedule; CUHK03 batch 48, erasing 0.6, 4 new slots), seed, single GPU, and evaluation metric | 4 steps instead of 5, so there is one fewer domain to forget through |
+| CLIP ViT-B/16 start, both stages, every loss and weight, all LRs, epochs, batch sizes, and per-domain overrides (Market as the first domain without KD; CUHK03 batch 48, erasing 0.6, 4 new slots), seed, single GPU, and evaluation metric | 4 steps instead of 5, so there is one fewer domain to forget through |
 | Prompt-pool mechanics (8 new slots per domain, 4 for CUHK03, old slots frozen) | the pool ends at **28 / 36** slots instead of full |
 | | unseen evaluation on the **publicly downloadable** sets only (see below), not all 7 |
 
 **How to read the results.** The paper has no published 4-domain numbers, so the notebook compares against the
-paper's 5-domain numbers **for the same four domains** (paper average over Market/Duke/MSMT17/CUHK03: 63.2 mAP /
-76.2 R1). Expected direction of the gap:
-* **Market and Duke** should come out *equal or a little higher* than the paper, because the model passes through
-  one fewer later domain and has less chance to forget them.
-* **MSMT17 and CUHK03** are trained in the same position relative to the end of the sequence, so they should land
-  *close to* the paper's numbers.
-* A result clearly *below* the paper on the last two domains, or far below on Market/Duke, would be a meaningful
-  sign of a reproduction problem. That is the useful check to report to your guide.
+paper's 5-domain numbers **for the same four domains** (paper average over Market/CUHK-SYSU/Duke/CUHK03: 77.2 mAP /
+84.0 R1). Expected direction of the gap:
+* **Market, CUHK-SYSU and Duke** should come out *equal or a little higher* than the paper, because the model skips
+  the large MSMT17 step and so has less chance to forget them.
+* **CUHK03** (the last step) should land *close to* the paper's number. It may also be slightly higher, since its
+  starting model has not been through MSMT17.
+* A result clearly *below* the paper, especially on CUHK03 or by many points on the earlier domains, would be a
+  meaningful sign of a reproduction problem. That is the useful check to report to your guide.
 
 **Prompt slots when the pool is not full.** Because the pool ends at 28/36, observation §7.3 now affects the
 *final* numbers: the official test script lets top-k also pick the 8 never-trained random slots. The notebook
@@ -296,10 +300,10 @@ that are public without a request form (`DOWNLOAD_PUBLIC_UNSEEN = True`; Interne
 
 | Set | How it is obtained | Protocol (same as the paper's script) |
 |---|---|---|
-| VIPeR | original UCSC zip, Internet Archive fallback, MD5-verified | 20 runs (10 splits × 2 directions) |
-| GRID | original CUHK/QMUL zip, Internet Archive fallback | 10 official folds |
-| i-LIDS (QMUL pedestrian) | original QMUL tgz, Internet Archive fallback | 10 random splits |
-| SenseReID | Google Drive (`gdown`) | 1 fixed split |
+| GRID | original CUHK zip (**worked on Kaggle, Oct 2026**) | 10 official folds |
+| VIPeR | original UCSC zip, then any Internet Archive copy, MD5-verified (**original host was down in Oct 2026; no archive copy found**) | 20 runs (10 splits × 2 directions) |
+| i-LIDS (QMUL pedestrian) | original QMUL tgz, then any Internet Archive copy (**original returned 404 in Oct 2026**) | 10 random splits |
+| SenseReID | Google Drive (`gdown`) (**file no longer public in Oct 2026**) | 1 fixed split |
 | PRID2011 | optional: paste the `prid_2011.zip` link from the TU Graz page into `PRID_ZIP_URL` | 10 splits |
 | CUHK01 / CUHK02 | request form only; attach if you have them | 20 runs / 1 split |
 
@@ -326,4 +330,4 @@ To run the full paper protocol later, upload CUHK-SYSU as a private Kaggle datas
 * AKA benchmark (Pu et al., CVPR 2021; [TPCD/LifelongReID](https://github.com/TPCD/LifelongReID)): the LReID protocol and `cuhksysu4reid` preprocessing.
 * DualPrompt (Wang et al., ECCV 2022): the G-/E-prompt design.
 * CUHK03-NP split (Zhong et al., CVPR 2017; [person-re-ranking](https://github.com/zhunzhong07/person-re-ranking)).
-* Kaggle datasets: [Market-1501](https://www.kaggle.com/datasets/pengcw1/market-1501), [DukeMTMC-reID](https://www.kaggle.com/datasets/whurobin/dukemtmcreid), [MSMT17](https://www.kaggle.com/datasets/achrafabid7/msmt17), [CUHK03](https://www.kaggle.com/datasets/priyanagda/cuhk03).
+* Kaggle datasets: [Market-1501](https://www.kaggle.com/datasets/pengcw1/market-1501), [DukeMTMC-reID](https://www.kaggle.com/datasets/whurobin/dukemtmcreid), [CUHK-SYSU](https://www.kaggle.com/datasets/manaschaiaonon/cuhk-sysu), [CUHK03](https://www.kaggle.com/datasets/priyanagda/cuhk03).
