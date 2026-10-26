@@ -316,6 +316,72 @@ official PAD loaders or the random-split protocol.
 
 To run the full paper protocol later, upload CUHK-SYSU as a private Kaggle dataset and set `PROTOCOL = "paper-5"`.
 
+### 8.2 Our run: results (Kaggle, one T4, `kaggle-4`, `RUN_MODE="full"`, seed 42)
+
+**Setup actually used:** Market-1501 → CUHK-SYSU → DukeMTMC-reID → CUHK03 (AKA order-1 without MSMT17). Kaggle
+inputs `pengcw1/market-1501`, `manaschaiaonon/cuhk-sysu` (raw release, converted in the notebook),
+`whurobin/dukemtmcreid`, `priyanagda/cuhk03` (CUHK03-NP detected). Total wall time **6 h 12 min**: Market 1 h 05,
+CUHK-SYSU 2 h 10, Duke about 1 h 50, CUHK03 46 min, plus evaluation.
+
+**Dataset statistics match the standard protocols exactly:** Market 751/12,936 train, 3,368 query, 15,913 gallery ·
+CUHK-SYSU 5,532/15,088 train, 2,900 query, 5,447 gallery · Duke 702/16,522 train, 2,228 query, 17,661 gallery ·
+CUHK03-NP 767/7,365 train, 1,400 query, 5,332 gallery.
+
+**Final model (after CUHK03), mAP / Rank-1 in %** (official evaluation, i.e. all 36 prompt slots):
+
+| Domain | Ours mAP | Paper mAP | Δ | Ours R1 | Paper R1 | Δ |
+|---|---|---|---|---|---|---|
+| Market-1501 | 79.0 | 77.5 | +1.5 | 90.4 | 89.8 | +0.6 |
+| CUHK-SYSU | 92.2 | 93.9 | −1.7 | 93.3 | 94.9 | −1.6 |
+| DukeMTMC-reID | 66.7 | 71.1 | −4.4 | 79.4 | 82.6 | −3.2 |
+| CUHK03 | 68.1 | 66.4 | +1.7 | 71.1 | 68.5 | +2.6 |
+| **Average (4 domains)** | **76.5** | **77.2** | **−0.7** | **83.6** | **83.9** | **−0.4** |
+
+Paper columns are PAD's AKA order-1 final-step numbers for the same four domains. They come from the 5-domain
+sequence, and were taken from search extracts of the paper, so check them against Table 1 of the PDF.
+
+**mAP after each step (forgetting matrix):**
+
+| After step | Market | CUHK-SYSU | Duke | CUHK03 | Avg |
+|---|---|---|---|---|---|
+| Market | 85.5 | – | – | – | 85.5 |
+| CUHK-SYSU | 82.3 | 93.9 | – | – | 88.1 |
+| Duke | 76.8 | 91.7 | 75.1 | – | 81.2 |
+| CUHK03 | 79.0 | 92.2 | 66.7 | 68.1 | 76.5 |
+
+**Unseen domains** (final model; same split protocol as the paper's script):
+
+| Set | Runs | Rank-1 | mAP | Source |
+|---|---|---|---|---|
+| GRID | 10 official folds | 44.2 | 54.9 | original CUHK link |
+| i-LIDS | 10 random splits | 77.2 | 83.9 | Internet Archive copy (2015) of the QMUL file |
+| VIPeR, PRID, CUHK01, CUHK02, SenseReID | – | – | – | not obtainable publicly in Oct 2026 |
+
+Average over these 2 sets: 60.7 R1 / 69.4 mAP. This is **not** comparable to the paper's 7-set Unseen-Avg; compare
+GRID and i-LIDS individually with the paper's per-dataset unseen columns, if Table 1 lists them.
+
+**Evaluation with only the 28 trained prompt slots** (§7.3 check): Market 79.2, CUHK-SYSU 92.2, Duke 67.9,
+CUHK03 69.7 mAP, average **77.3 mAP / 84.5 R1**, i.e. +0.8 mAP over the official evaluation. Letting top-k pick the 8
+never-trained random slots costs a little accuracy but does not change the conclusion.
+
+**Interpretation.**
+1. **The method replicates.** On the four domains it covers, the overall average is within 0.7 mAP and 0.4 R1 of the
+   paper, about the size of the paper's own seed-to-seed spread (±0.49 mAP on the 5-domain average). That holds
+   even though one domain is missing and only one seed was run.
+2. **Per domain, three of four are within ±1.7 mAP.** Market and CUHK03 are slightly above the paper, CUHK-SYSU
+   slightly below.
+3. **Duke is the clear exception (−4.4 mAP),** contrary to our expectation that earlier domains would do *better*
+   without MSMT17. Right after training on it Duke reaches 75.1 mAP, but the CUHK03 step costs it 8.3 points, the
+   largest drop in the run. One plausible reason is that in the paper's sequence the large, diverse MSMT17 step sits
+   between Duke and CUHK03, and the EMA teacher carried into CUHK03 then already covers broader visual statistics.
+   Here the model jumps straight from Duke to the small, visually distinct CUHK03. Confirming this needs either the
+   5-domain run (with MSMT17) or more seeds.
+4. **Backward transfer is visible:** Market *recovers* from 76.8 to 79.0 mAP after the CUHK03 step, and CUHK-SYSU
+   barely moves (93.9 → 92.2). This matches the paper's claim that the frozen text anchor and EMA distillation
+   limit drift.
+5. **Limitations:** single seed; MSMT17 missing (so this is not Table 1's exact protocol); only 2 of 7 unseen sets;
+   paper numbers not yet checked against the PDF.
+
 ## 9. Suggested follow-up experiments (cheap, informative)
 
 * **Seed variance:** 2–3 seeds (`BASE_CFG["SOLVER"]["SEED"]`) to compare against the paper's ±0.49.
