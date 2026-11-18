@@ -88,6 +88,10 @@ def train_student_domain(method, domain, step_idx, prev_domain):
     lg = setup_logger(ddir, "student_log.txt")
     ds = labelled_view(build_dataset(domain, cfg, verbose=False), domain)
     train_loader, _, _, _, num_classes = _pad_make_dataloader(cfg, dataset=ds)
+    if len(train_loader) == 0:
+        raise ValueError(f"{domain}: {num_classes} labelled identities cannot fill one PK batch of "
+                         f"{train_loader.batch_size} ({train_loader.batch_size // cfg.DATALOADER.NUM_INSTANCE} ids x "
+                         f"{cfg.DATALOADER.NUM_INSTANCE}); raise LABEL_FRACTION")
     unl_iter = None
     if ds.unlabelled and method == "ours":
         unl_loader = DataLoader(ImageDataset(ds.unlabelled, train_loader.dataset.transform),
@@ -160,7 +164,7 @@ def train_student_domain(method, domain, step_idx, prev_domain):
         t0 = time.time()
         scheduler.step(epoch - 1)
         student.train()
-        meters = defaultdict(float); n_seen = 0
+        meters = defaultdict(float); n_seen = 0; it = 0
         for it, (img, pid, _, _) in enumerate(train_loader):
             if RUN_MODE == "quick" and it >= QUICK["max_iters_per_epoch"]:
                 break
