@@ -135,7 +135,8 @@ def train_student_domain(method, domain, step_idx, prev_domain):
 
     params = [p for p in student.parameters() if p.requires_grad] + list(kd_proj.parameters())
     optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=STUDENT_WD)
-    scheduler = CosineLRScheduler(optimizer, t_initial=epochs, lr_min=lr * 0.01, warmup_t=min(STUDENT_WARMUP_EPOCHS, epochs - 1),
+    warm = min(STUDENT_WARMUP_EPOCHS, epochs - 1)     # linear warm-up, then cosine down to 1 % of lr at the last epoch
+    scheduler = CosineLRScheduler(optimizer, t_initial=max(1, epochs - warm), lr_min=lr * 0.01, warmup_t=warm,
                                   warmup_lr_init=lr * 0.01, warmup_prefix=True)
     scaler = torch.amp.GradScaler("cuda", enabled=USE_AMP)
     xent, tri = CrossEntropyLabelSmooth(num_classes), TripletLoss(0.3)
