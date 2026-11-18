@@ -1,8 +1,8 @@
 # %% [markdown]
 # ## Student model
 # `backbone → global feature f → BNNeck → ID classifier`, as in standard ReID baselines.
-# * **MobileCLIP-S0/S1/S2**: the image tower of Apple's MobileCLIP (open_clip, `datacompdr` weights from the Hugging
-#   Face hub). Its 512-d output lives in CLIP's image–text space, so it is compared with the teacher's text anchors
+# * **MobileCLIP-S1/S2/B and MobileCLIP2-S0/S2/S4**: the image tower of Apple's MobileCLIP (open_clip; weights from the
+#   Hugging Face hub). Its 512-d output lives in CLIP's image–text space, so it is compared with the teacher's text anchors
 #   directly (`to_text` = identity).
 # * **timm backbones**: ImageNet-pretrained CNNs; a learned linear layer maps f to the 512-d text space.
 #
@@ -17,7 +17,8 @@ except ImportError:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "open_clip_torch"], check=True)
     import open_clip
 
-MOBILECLIP_TAGS = {"MobileCLIP-S0": "datacompdr", "MobileCLIP-S1": "datacompdr", "MobileCLIP-S2": "datacompdr"}
+MOBILECLIP_TAGS = {"MobileCLIP-S1": "datacompdr", "MobileCLIP-S2": "datacompdr", "MobileCLIP-B": "datacompdr",
+                   "MobileCLIP2-S0": "dfndr2b", "MobileCLIP2-S2": "dfndr2b", "MobileCLIP2-S4": "dfndr2b"}
 
 
 def _build_backbone(arch):

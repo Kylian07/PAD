@@ -5,8 +5,8 @@
 
 # %%
 STUDENT_ARCH = os.environ.get("LITE_ARCH", "MobileCLIP-S1")
-#   "MobileCLIP-S0" | "MobileCLIP-S1" | "MobileCLIP-S2"   (open_clip, Apple DataCompDR weights from the HF hub;
-#                                                          CLIP-aligned, so the teacher's text anchors apply directly)
+#   "MobileCLIP-S1" (21.5 M) | "MobileCLIP2-S0" (11.4 M) | "MobileCLIP-S2" | "MobileCLIP2-S2" | "MobileCLIP-B"
+#                       (open_clip, Apple weights from the HF hub; CLIP-aligned, so the teacher's text anchors apply)
 #   "timm:resnet18" | "timm:mobilenetv3_large_100" | "timm:resnet50" | any timm model name with ImageNet weights
 #                                                          (not CLIP-aligned: a learned 512-d projection is used)
 STUDENT_PRETRAINED = os.environ.get("LITE_PRETRAINED", "1") == "1"   # keep True; False = random init (offline tests only)

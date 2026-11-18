@@ -32,7 +32,7 @@ Main switches (in the "LiteLReID configuration" cell):
 
 | Switch | Values |
 |---|---|
-| `STUDENT_ARCH` | `"MobileCLIP-S1"` (default), `"MobileCLIP-S0"`, `"MobileCLIP-S2"`, `"timm:resnet18"`, any `timm:` model |
+| `STUDENT_ARCH` | `"MobileCLIP-S1"` (default, 21.5 M), `"MobileCLIP2-S0"` (11.4 M), `"MobileCLIP-S2"`, `"MobileCLIP-B"`, `"timm:resnet18"`, any `timm:` model |
 | `STUDENT_METHODS` | `["ours"]`; add `"naive_ft"` for the lower-bound baseline (about 1.5 h more) |
 | `LABEL_FRACTION` | `1.0` (fully supervised), or e.g. `0.25`. The teacher then also sees only the labelled 25 % |
 | `LAMBDA`, `TAU` | loss weights and temperatures (untuned starting points) |
