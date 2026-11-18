@@ -74,6 +74,7 @@ def compute_prototypes(student, ds, cfg):
 
 
 def _cycle(loader):
+    assert len(loader) > 0, "empty loader"
     while True:
         for b in loader:
             yield b
@@ -95,7 +96,7 @@ def train_student_domain(method, domain, step_idx, prev_domain):
     unl_iter = None
     if ds.unlabelled and method == "ours":
         unl_loader = DataLoader(ImageDataset(ds.unlabelled, train_loader.dataset.transform),
-                                batch_size=STUDENT_UNLABELLED_BATCH, shuffle=True, drop_last=True,
+                                batch_size=min(STUDENT_UNLABELLED_BATCH, len(ds.unlabelled)), shuffle=True, drop_last=True,
                                 num_workers=NUM_WORKERS, collate_fn=_train_collate, pin_memory=True)
         unl_iter = _cycle(unl_loader)
 
