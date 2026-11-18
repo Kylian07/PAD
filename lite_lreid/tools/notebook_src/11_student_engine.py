@@ -96,7 +96,7 @@ def train_student_domain(method, domain, step_idx, prev_domain):
         unl_iter = _cycle(unl_loader)
 
     phase = "first" if step_idx == 0 else "later"
-    epochs = 1 if RUN_MODE == "quick" else STUDENT_EPOCHS[phase]
+    epochs = QUICK.get("student_epochs", 1) if RUN_MODE == "quick" else STUDENT_EPOCHS[phase]
     lr = STUDENT_LR[phase]
     student = StudentReID(STUDENT_ARCH, num_classes).to(DEVICE)
     if prev_domain:
